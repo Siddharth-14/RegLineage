@@ -1,0 +1,92 @@
+# RegLineage lineage manifest
+#
+# This file is a HAND-DECLARED map of source fields -> transforms -> the
+# regulatory report field they feed. RegLineage does not auto-discover
+# lineage from SQL/ETL code; a human data owner declares it here. See
+# README.md for why auto-discovery is explicitly out of scope for this demo.
+#
+# node types:
+#   source_field  -> a column in one of the raw synthetic tables
+#   transform     -> a named processing step (join, rollup, check) that
+#                    consumes one or more upstream nodes
+#   report_field  -> a field that lands in the regulatory report extract
+#
+# All table/column names refer to the synthetic CSVs in data/.
+
+nodes:
+  - id: customers.customer_id
+    type: source_field
+    table: customers
+    column: customer_id
+    description: Primary key on the customer master table.
+
+  - id: customers.kyc_status
+    type: source_field
+    table: customers
+    column: kyc_status
+    description: KYC verification status recorded for the customer.
+
+  - id: accounts.account_id
+    type: source_field
+    table: accounts
+    column: account_id
+    description: Primary key on the account table.
+
+  - id: accounts.customer_id
+    type: source_field
+    table: accounts
+    column: customer_id
+    description: Foreign key linking an account back to its owning customer.
+
+  - id: transactions.account_id
+    type: source_field
+    table: transactions
+    column: account_id
+    description: Foreign key linking a transaction to the account it posted to.
+
+  - id: transactions.amount
+    type: source_field
+    table: transactions
+    column: amount
+    description: Posted transaction amount used in the balance rollup.
+
+  - id: transactions.txn_date
+    type: source_field
+    table: transactions
+    column: txn_date
+    description: Date the transaction posted; drives the freshness check.
+
+  - id: transform.kyc_check
+    type: transform
+    description: Confirms the account's owning customer has a recorded KYC status.
+
+  - id: transform.account_link
+    type: transform
+    description: Joins accounts to their owning customer record.
+
+  - id: transform.balance_rollup
+    type: transform
+    description: Sums posted transactions per account into a balance figure.
+
+  - id: transform.report_assembly
+    type: transform
+    description: Assembles the KYC check, account link, and balance rollup into the report row.
+
+  - id: reg_report_extract.reported_value
+    type: report_field
+    table: reg_report_extract
+    column: reported_value
+    description: The exposure/balance value that lands in the regulatory report extract.
+
+edges:
+  - [customers.kyc_status, transform.kyc_check]
+  - [accounts.customer_id, transform.account_link]
+  - [customers.customer_id, transform.account_link]
+  - [accounts.account_id, transform.balance_rollup]
+  - [transactions.account_id, transform.balance_rollup]
+  - [transactions.amount, transform.balance_rollup]
+  - [transactions.txn_date, transform.balance_rollup]
+  - [transform.kyc_check, transform.report_assembly]
+  - [transform.account_link, transform.report_assembly]
+  - [transform.balance_rollup, transform.report_assembly]
+  - [transform.report_assembly, reg_report_extract.reported_value]
